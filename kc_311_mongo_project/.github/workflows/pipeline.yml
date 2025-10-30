@@ -1,0 +1,46 @@
+# .github/workflows/pipeline.yml
+name: Run Hourly 311 Data Pipeline
+
+on:
+  schedule:
+    # Runs at minute 30 of every hour
+    - cron: '30 * * * *'
+  workflow_dispatch: # Allows you to run it manually
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Set up Java for Spark
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install Python dependencies
+        run: pip install pandas sodapy pymongo
+
+      - name: Run Ingestion Script
+        env:
+          MONGO_CONNECTION_STRING: ${{ secrets.MONGO_CONNECTION_STRING }}
+        run: python ingest_data.py
+
+      - name: Run Spark Transformation Script
+        env:
+          MONGO_CONNECTION_STRING: ${{ secrets.MONGO_CONNECTION_STRING }}
+        run: |
+          # Download and set up Spark
+          wget https://archive.apache.org/dist/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
+          tar -xvzf spark-3.5.0-bin-hadoop3.tgz
+          # Run the Spark job, providing the MongoDB connector package
+          spark-3.5.0-bin-hadoop3/bin/spark-submit \
+            --packages org.mongodb.spark:mongo-spark-connector_2.12:10.2.1 \
+            transform_data.py
